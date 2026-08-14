@@ -42,11 +42,18 @@ bool uploaderBegin() {
   config.timeout.socketConnection = 8000;
   config.timeout.wifiReconnect    = 10000;
 
+  // =================================================================
+  // 🎯 จุดสำคัญ: ต้องกำหนด Buffer Size (16384) "ก่อน" สั่ง Firebase.begin()
+  // =================================================================
+  fbdo.setBSSLBufferSize(16384, 1024);
+  fbdo.setResponseSize(2048);
+
+  fbdoMeta.setBSSLBufferSize(16384, 1024);
+  fbdoMeta.setResponseSize(2048);
+
+  // เริ่มต้นเชื่อมต่อ Firebase หลังจากตั้งค่า Buffer แล้ว
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
-  fbdo.setBSSLBufferSize(4096, 2048);
-  fbdo.setResponseSize(2048);
-  fbdoMeta.setBSSLBufferSize(2048, 1024);
 
   Serial.printf("📡 DB: %s\n📂 path: %s\n", FIREBASE_HOST, DB_PATH);
   return true;
@@ -66,14 +73,17 @@ bool uploaderSendBatch(const Batch_t &b) {
     // ส่ง epoch_ms เป็น string กันปัญหา double ปัดเลข 13 หลัก
     rec.set("uptime_ms", keyOf(b.s[i].epoch_ms));
     rec.set("AccX_CH0", b.s[i].ax[0]);
+    rec.set("AccX_CH1", b.s[i].ax[1]);
+    rec.set("AccX_CH2", b.s[i].ax[2]);
+#if SEND_ALL_AXES
+    // ตั้ง SEND_ALL_AXES เป็น true ใน config.h ถ้าจะเอา Y/Z ไปใช้ด้วย
     rec.set("AccY_CH0", b.s[i].ay[0]);
     rec.set("AccZ_CH0", b.s[i].az[0]);
-    rec.set("AccX_CH1", b.s[i].ax[1]);
     rec.set("AccY_CH1", b.s[i].ay[1]);
     rec.set("AccZ_CH1", b.s[i].az[1]);
-    rec.set("AccX_CH2", b.s[i].ax[2]);
     rec.set("AccY_CH2", b.s[i].ay[2]);
     rec.set("AccZ_CH2", b.s[i].az[2]);
+#endif
     batchJson.set(keyOf(b.s[i].epoch_ms), rec);
   }
 
@@ -143,11 +153,11 @@ void uploaderHeartbeat() {
 
   FirebaseJson hb;
   hb.set("device_epoch", keyOf(epochMillis()));
-  hb.set("rssi",      WiFi.RSSI());
+  hb.set("rssi",       WiFi.RSSI());
   hb.set("free_heap", (int)ESP.getFreeHeap());
-  hb.set("sent",      (int)g_stats.sent);
-  hb.set("failed",    (int)g_stats.failed);
-  hb.set("dropped",   (int)g_stats.dropped);
+  hb.set("sent",       (int)g_stats.sent);
+  hb.set("failed",     (int)g_stats.failed);
+  hb.set("dropped",    (int)g_stats.dropped);
 
   if (!Firebase.RTDB.updateNode(&fbdoMeta, META_PATH "/heartbeat", &hb)) {
     Serial.printf("⚠️  heartbeat fail http=%d | %s\n",
