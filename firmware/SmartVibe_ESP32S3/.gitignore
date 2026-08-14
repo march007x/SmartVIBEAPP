@@ -1,0 +1,17 @@
+firmware/SmartVibe_ESP32S3/secrets.h
+dashboard/.streamlit/secrets.toml
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.ipynb_checkpoints/
+
+.DS_Store
+Thumbs.db
+
+build/
+*.bin
+*.elf
