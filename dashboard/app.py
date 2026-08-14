@@ -14,6 +14,7 @@
 
 รัน: streamlit run app.py
 """
+import json
 import time
 
 import streamlit as st
@@ -101,35 +102,65 @@ def main():
     st.markdown("---")
     charts.spectrum(result)
 
-    # ---------- 6) ผู้ช่วย AI ----------
+    # ---------- 6) เก็บประวัติสำหรับวิเคราะห์แนวโน้ม ----------
+    # เก็บทุก 30 วินาที (ไม่ใช่ทุก refresh) — ดู core/state.log_health()
+    state.log_health(ss, result)
+
+    # ---------- 7) ผู้ช่วย AI ----------
     st.markdown("---")
     st.subheader("🤖 ผู้ช่วย AI วิเคราะห์")
-    provider = st.selectbox("ผู้ให้บริการ", list(ai_assistant.PROVIDERS.keys()))
-    st.caption(ai_assistant.PROVIDERS[provider]["note"])
-    snap = ai_assistant.snapshot(result, ss)
 
-    a1, a2 = st.columns([1, 2])
+    providers = ai_assistant.available_providers()
+    provider = st.selectbox("ผู้ให้บริการ", providers, index=0)
+    st.caption(ai_assistant.PROVIDERS[provider]["note"])
+
+    level, msg = ai_assistant.status_line(provider)
+    {"success": st.success, "warning": st.warning,
+     "error": st.error, "info": st.info}[level](msg)
+
+    snap = ai_assistant.snapshot(result, ss)
+    n_log = len(ss.get("health_log", []))
+
+    a1, a2, a3 = st.columns([1, 1, 2])
     with a1:
         # ✅ on-demand เท่านั้น ไม่ผูกกับ auto-refresh
-        if st.button("🔍 วิเคราะห์สถานะตอนนี้"):
+        if st.button("🔍 วิเคราะห์สถานะตอนนี้", use_container_width=True,
+                     disabled=not ai_assistant.is_ready(provider)):
             with st.spinner("กำลังวิเคราะห์..."):
                 ss.ai_result = ai_assistant.analyze_cached(
                     provider, ai_assistant.hash_of(snap), snap)
     with a2:
+        if st.button(f"📈 วิเคราะห์แนวโน้ม ({n_log} จุด)", use_container_width=True,
+                     disabled=not ai_assistant.is_ready(provider)):
+            with st.spinner("กำลังประเมินแนวโน้ม..."):
+                hist_json = json.dumps(ss["health_log"], ensure_ascii=False)
+                ss.ai_trend = ai_assistant.analyze_trend_cached(
+                    provider, ai_assistant.hash_of(hist_json), hist_json)
+    with a3:
         with st.expander("ดูข้อมูลที่ส่งให้ AI"):
+            st.caption("สถานะตอนนี้ (snapshot)")
             st.code(snap, language="json")
+            st.caption(f"ประวัติสำหรับดูแนวโน้ม — เก็บทุก {C.TREND_SAMPLE_SEC} วินาที "
+                       f"เฉพาะตอนที่ล็อก baseline แล้วและมีแรงกระตุ้นพอ")
+            st.code(json.dumps(ss.get("health_log", [])[-10:],
+                               ensure_ascii=False, indent=1), language="json")
 
     if ss.get("ai_result"):
-        st.info(ss.ai_result)
+        st.info("**สถานะตอนนี้**\n\n" + ss.ai_result)
+    if ss.get("ai_trend"):
+        st.warning("**แนวโน้ม**\n\n" + ss.ai_trend)
 
     debug.render(result, df, t0, ss.client, stuck)
 
 
 try:
     main()
-except Exception:
-    st.error("เกิดข้อผิดพลาดระหว่างประมวลผล")
-    st.exception(Exception)
-    raise
+except Exception as e:
+    # 🐛 บั๊กเดิม: st.exception(Exception) ส่ง "คลาส" ไม่ใช่ตัว error จริง
+    #    ทำให้เวลาแอปพัง หน้าเว็บไม่บอกสาเหตุเลย ไล่จับปัญหาไม่ได้
+    st.error(f"เกิดข้อผิดพลาดระหว่างประมวลผล: {type(e).__name__}: {e}")
+    st.exception(e)
+    # ไม่ raise ซ้ำ เพื่อให้ st_autorefresh ด้านล่างยังทำงาน
+    # → หน้าเว็บพยายามใหม่เองในรอบถัดไป ไม่ค้างตายถาวร
 
 st_autorefresh(interval=C.REFRESH_MS, limit=None, key="smartvibe_autorefresh")
