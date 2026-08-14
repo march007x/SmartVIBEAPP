@@ -17,7 +17,7 @@ import time
 import requests
 import streamlit as st
 
-from config import FLOOR_NAMES
+from config import FLOOR_NAMES, _secret
 
 COOLDOWN_SEC    = 300     # ห้ามส่ง event เดิมซ้ำใน 5 นาที
 HEALTH_DROP_PCT = 15.0    # Health ตกเกินกี่ %
@@ -25,10 +25,8 @@ HEALTH_WINDOW_S = 600.0   # ...ภายในกี่วินาที
 
 
 def _cfg(key: str) -> str:
-    try:
-        return st.secrets.get(key, "")
-    except Exception:
-        return ""
+    """ใช้ตัวอ่านเดียวกับ config.py — รองรับทั้ง st.secrets / ไฟล์ / env var"""
+    return _secret(key, "")
 
 
 @st.cache_resource
